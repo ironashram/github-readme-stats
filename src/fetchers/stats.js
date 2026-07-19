@@ -16,10 +16,13 @@ dotenv.config();
 
 // GraphQL queries.
 const GRAPHQL_REPOS_FIELD = `
-  repositories(first: 100, ownerAffiliations: OWNER, orderBy: {direction: DESC, field: STARGAZERS}, after: $after) {
+  repositories(first: 100, ownerAffiliations: $ownerAffiliations, orderBy: {direction: DESC, field: STARGAZERS}, after: $after) {
     totalCount
     nodes {
       name
+      owner {
+        login
+      }
       stargazers {
         totalCount
       }
@@ -32,7 +35,7 @@ const GRAPHQL_REPOS_FIELD = `
 `;
 
 const GRAPHQL_REPOS_QUERY = `
-  query userInfo($login: String!, $after: String) {
+  query userInfo($login: String!, $after: String, $ownerAffiliations: [RepositoryAffiliation]) {
     user(login: $login) {
       ${GRAPHQL_REPOS_FIELD}
     }
@@ -40,18 +43,21 @@ const GRAPHQL_REPOS_QUERY = `
 `;
 
 const GRAPHQL_STATS_QUERY = `
-  query userInfo($login: String!, $after: String, $includeMergedPullRequests: Boolean!, $includeDiscussions: Boolean!, $includeDiscussionsAnswers: Boolean!, $startTime: DateTime = null) {
+  query userInfo($login: String!, $after: String, $ownerAffiliations: [RepositoryAffiliation], $includeOrgStars: Boolean!, $includeMergedPullRequests: Boolean!, $includeDiscussions: Boolean!, $includeDiscussionsAnswers: Boolean!, $startTime: DateTime = null) {
     user(login: $login) {
       name
       login
+      organizations(first: 100) @include(if: $includeOrgStars) {
+        nodes {
+          login
+          viewerCanAdminister
+        }
+      }
       commits: contributionsCollection (from: $startTime) {
         totalCommitContributions,
       }
       reviews: contributionsCollection {
         totalPullRequestReviewContributions
-      }
-      repositoriesContributedTo(first: 1, contributionTypes: [COMMIT, ISSUE, PULL_REQUEST, REPOSITORY]) {
-        totalCount
       }
       pullRequests(first: 1) {
         totalCount
@@ -78,6 +84,25 @@ const GRAPHQL_STATS_QUERY = `
     }
   }
 `;
+
+// Fetched separately from the stats query: combined with the 100-repo page it
+// exceeds GitHub's per-query resource limits.
+const GRAPHQL_CONTRIBUTED_TO_QUERY = `
+  query userInfo($login: String!) {
+    user(login: $login) {
+      repositoriesContributedTo(first: 1, contributionTypes: [COMMIT, ISSUE, PULL_REQUEST, REPOSITORY]) {
+        totalCount
+      }
+    }
+  }
+`;
+
+/**
+ * Whether stars of repos in administered orgs are counted. Defaults to true.
+ *
+ * @returns {boolean} Include org stars.
+ */
+const includeOrgStars = () => process.env.INCLUDE_ORG_STARS !== "false";
 
 /**
  * Stats fetcher object.
@@ -122,11 +147,16 @@ const statsFetcher = async ({
   let stats;
   let hasNextPage = true;
   let endCursor = null;
+  const ownerAffiliations = includeOrgStars()
+    ? ["OWNER", "ORGANIZATION_MEMBER"]
+    : ["OWNER"];
   while (hasNextPage) {
     const variables = {
       login: username,
       first: 100,
       after: endCursor,
+      ownerAffiliations,
+      includeOrgStars: includeOrgStars(),
       includeMergedPullRequests,
       includeDiscussions,
       includeDiscussionsAnswers,
@@ -157,6 +187,43 @@ const statsFetcher = async ({
   }
 
   return stats;
+};
+
+/**
+ * Contributed-to fetcher object.
+ *
+ * @param {object} variables Fetcher variables.
+ * @param {string} token GitHub token.
+ * @returns {Promise<import('axios').AxiosResponse>} Axios response.
+ */
+const contributedToFetcher = (variables, token) => {
+  return request(
+    {
+      query: GRAPHQL_CONTRIBUTED_TO_QUERY,
+      variables,
+    },
+    {
+      Authorization: `bearer ${token}`,
+    },
+  );
+};
+
+/**
+ * Fetch total repositories contributed to for a given username.
+ *
+ * @param {string} username GitHub username.
+ * @returns {Promise<number>} Total repositories contributed to.
+ */
+const totalContributedToFetcher = async (username) => {
+  const res = await retryer(contributedToFetcher, { login: username });
+  if (res.data.errors) {
+    logger.error(res.data.errors);
+    throw new CustomError(
+      "Something went wrong while trying to retrieve the contributed-to data using the GraphQL API.",
+      CustomError.GRAPHQL_ERROR,
+    );
+  }
+  return res.data.data.user.repositoriesContributedTo.totalCount;
 };
 
 /**
@@ -247,6 +314,7 @@ const fetchStats = async (
     include_discussions,
     include_discussions_answers,
     commits_year,
+    include_org_stars: includeOrgStars(),
   };
   const cachedStats = getCachedData("stats", cacheParams);
   if (cachedStats) {
@@ -325,19 +393,32 @@ const fetchStats = async (
     stats.totalDiscussionsAnswered =
       user.repositoryDiscussionComments.totalCount;
   }
-  stats.contributedTo = user.repositoriesContributedTo.totalCount;
+  stats.contributedTo = await totalContributedToFetcher(username);
 
   // Retrieve stars while filtering out repositories to be hidden.
   const allExcludedRepos = [...exclude_repo, ...excludeRepositories];
   let repoToHide = new Set(allExcludedRepos);
 
-  stats.totalStars = user.repositories.nodes
-    .filter((data) => {
-      return !repoToHide.has(data.name);
-    })
-    .reduce((prev, curr) => {
-      return prev + curr.stargazers.totalCount;
-    }, 0);
+  let repoNodes = user.repositories.nodes.filter((data) => {
+    return !repoToHide.has(data.name);
+  });
+
+  // With INCLUDE_ORG_STARS the affiliation ORGANIZATION_MEMBER returns repos of
+  // every org the user is in; keep only orgs the token owner can administer.
+  if (includeOrgStars()) {
+    const adminOrgs = new Set(
+      (user.organizations ? user.organizations.nodes : [])
+        .filter((org) => org.viewerCanAdminister)
+        .map((org) => org.login),
+    );
+    repoNodes = repoNodes.filter((data) => {
+      return data.owner.login === user.login || adminOrgs.has(data.owner.login);
+    });
+  }
+
+  stats.totalStars = repoNodes.reduce((prev, curr) => {
+    return prev + curr.stargazers.totalCount;
+  }, 0);
 
   stats.rank = calculateRank({
     all_commits: include_all_commits,

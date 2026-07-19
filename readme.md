@@ -704,6 +704,11 @@ GitHub Readme Stats provides several environment variables that can be used to c
       <td>Enables fetching all starred repositories for accurate star counts, especially for users with more than 100 repositories. This may increase response times and API points usage.</td>
       <td><code>true</code> or <code>false</code></td>
     </tr>
+    <tr>
+      <td><code>INCLUDE_ORG_STARS</code></td>
+      <td>Counts stars of repositories owned by organizations the user can administer on the stats card. Enabled by default; set to <code>false</code> to count only user-owned repositories.</td>
+      <td><code>true</code> or <code>false</code></td>
+    </tr>
   </tbody>
 </table>
 

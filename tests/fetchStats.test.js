@@ -90,6 +90,53 @@ const data_repo_zero_stars = {
   },
 };
 
+const data_org_stars = {
+  data: {
+    user: {
+      ...data_stats.data.user,
+      login: "ironashram",
+      organizations: {
+        nodes: [
+          { login: "owned-org", viewerCanAdminister: true },
+          { login: "member-org", viewerCanAdminister: false },
+        ],
+      },
+      repositories: {
+        totalCount: 5,
+        nodes: [
+          {
+            name: "test-repo-1",
+            owner: { login: "ironashram" },
+            stargazers: { totalCount: 100 },
+          },
+          {
+            name: "org-repo-1",
+            owner: { login: "owned-org" },
+            stargazers: { totalCount: 50 },
+          },
+          {
+            name: "org-repo-2",
+            owner: { login: "member-org" },
+            stargazers: { totalCount: 25 },
+          },
+        ],
+        pageInfo: {
+          hasNextPage: false,
+          endCursor: "cursor",
+        },
+      },
+    },
+  },
+};
+
+const data_contributed_to = {
+  data: {
+    user: {
+      repositoriesContributedTo: { totalCount: 61 },
+    },
+  },
+};
+
 const error = {
   errors: [
     {
@@ -105,9 +152,13 @@ const mock = new MockAdapter(axios);
 
 beforeEach(() => {
   process.env.FETCH_MULTI_PAGE_STARS = "false"; // Set to `false` to fetch only one page of stars.
+  process.env.INCLUDE_ORG_STARS = "false";
   mock.onPost("https://api.github.com/graphql").reply((cfg) => {
     let req = JSON.parse(cfg.data);
 
+    if (req.query.includes("repositoriesContributedTo(")) {
+      return [200, data_contributed_to];
+    }
     if (
       req.variables &&
       req.variables.startTime &&
@@ -157,12 +208,15 @@ describe("Test fetchStats", () => {
   });
 
   it("should stop fetching when there are repos with zero stars", async () => {
+    process.env.FETCH_MULTI_PAGE_STARS = "true";
     mock.reset();
     mock
       .onPost("https://api.github.com/graphql")
       .replyOnce(200, data_stats)
       .onPost("https://api.github.com/graphql")
-      .replyOnce(200, data_repo_zero_stars);
+      .replyOnce(200, data_repo_zero_stars)
+      .onPost("https://api.github.com/graphql")
+      .replyOnce(200, data_contributed_to);
 
     let stats = await fetchStats("anuraghazra");
     const rank = calculateRank({
@@ -172,7 +226,7 @@ describe("Test fetchStats", () => {
       reviews: 50,
       issues: 200,
       repos: 5,
-      stars: 300,
+      stars: 600,
       followers: 100,
     });
 
@@ -185,7 +239,7 @@ describe("Test fetchStats", () => {
       totalPRsMerged: 0,
       mergedPRsPercentage: 0,
       totalReviews: 50,
-      totalStars: 300,
+      totalStars: 600,
       totalDiscussionsStarted: 0,
       totalDiscussionsAnswered: 0,
       rank,
@@ -370,6 +424,49 @@ describe("Test fetchStats", () => {
       mergedPRsPercentage: 0,
       totalReviews: 50,
       totalStars: 300,
+      totalDiscussionsStarted: 0,
+      totalDiscussionsAnswered: 0,
+      rank,
+    });
+  });
+
+  it("should count stars of repos in administered orgs if 'INCLUDE_ORG_STARS' env variable is set to `true`", async () => {
+    process.env.INCLUDE_ORG_STARS = "true";
+    mock.reset();
+    mock.onPost("https://api.github.com/graphql").reply((cfg) => {
+      const req = JSON.parse(cfg.data);
+      if (req.query.includes("repositoriesContributedTo(")) {
+        return [200, data_contributed_to];
+      }
+      expect(req.variables.ownerAffiliations).toStrictEqual([
+        "OWNER",
+        "ORGANIZATION_MEMBER",
+      ]);
+      return [200, data_org_stars];
+    });
+
+    let stats = await fetchStats("ironashram");
+    const rank = calculateRank({
+      all_commits: false,
+      commits: 100,
+      prs: 300,
+      reviews: 50,
+      issues: 200,
+      repos: 5,
+      stars: 150,
+      followers: 100,
+    });
+
+    expect(stats).toStrictEqual({
+      contributedTo: 61,
+      name: "Anurag Hazra",
+      totalCommits: 100,
+      totalIssues: 200,
+      totalPRs: 300,
+      totalPRsMerged: 0,
+      mergedPRsPercentage: 0,
+      totalReviews: 50,
+      totalStars: 150,
       totalDiscussionsStarted: 0,
       totalDiscussionsAnswered: 0,
       rank,

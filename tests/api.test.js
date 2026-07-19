@@ -102,13 +102,18 @@ const faker = (query, data) => {
     setHeader: jest.fn(),
     send: jest.fn(),
   };
-  mock.onPost("https://api.github.com/graphql").replyOnce(200, data);
+  mock
+    .onPost("https://api.github.com/graphql")
+    .replyOnce(200, data)
+    .onPost("https://api.github.com/graphql")
+    .replyOnce(200, data);
 
   return { req, res };
 };
 
 beforeEach(() => {
   process.env.CACHE_SECONDS = undefined;
+  process.env.INCLUDE_ORG_STARS = "false";
 });
 
 afterEach(() => {
