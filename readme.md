@@ -607,6 +607,7 @@ Selecting the right scopes for your token is important in case you want to displ
 * Scopes to select:
   * repo
   * read:user
+  * read:org (required for counting stars of org-owned repositories, see <code>INCLUDE_ORG_STARS</code>)
 * Click on `Generate token` and copy it.
 
 #### Fine-grained token
