@@ -61,6 +61,9 @@ const getCacheFilePath = (key) => {
  * @returns {any|null} The cached data or null if not found/expired.
  */
 const getCachedData = (type, params, ttl = DEFAULT_TTL) => {
+  if (process.env.NODE_ENV === "test") {
+    return null;
+  }
   try {
     const key = getCacheKey(type, params);
     const filePath = getCacheFilePath(key);
@@ -101,6 +104,9 @@ const getCachedData = (type, params, ttl = DEFAULT_TTL) => {
  * @param {any} data The data to cache.
  */
 const setCachedData = (type, params, data) => {
+  if (process.env.NODE_ENV === "test") {
+    return;
+  }
   try {
     ensureCacheDir();
 
