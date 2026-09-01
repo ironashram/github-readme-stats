@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package*.json ./
 
 RUN npm i --omit=dev --ignore-scripts --no-audit
-RUN npm i express
+RUN npm i express --ignore-scripts
 
 COPY api ./api
 COPY src ./src
@@ -20,7 +20,7 @@ COPY --from=builder /app /app
 
 RUN mkdir -p /app/cache && chmod 777 /app/cache
 
-RUN npm install -g dotenv-cli
+RUN npm install -g dotenv-cli --ignore-scripts
 RUN apk --no-cache add curl
 
 ARG PORT=9000
