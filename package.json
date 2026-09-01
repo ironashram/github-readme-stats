@@ -1,6 +1,6 @@
 {
   "name": "github-readme-stats",
-  "version": "1.0.0",
+  "version": "0.1.1",
   "description": "Dynamically generate stats for your GitHub readme",
   "keywords": [
     "github-readme-stats",
@@ -10,13 +10,13 @@
   ],
   "main": "src/index.js",
   "type": "module",
-  "homepage": "https://github.com/anuraghazra/github-readme-stats",
+  "homepage": "https://github.com/ironashram/github-readme-stats",
   "bugs": {
-    "url": "https://github.com/anuraghazra/github-readme-stats/issues"
+    "url": "https://github.com/ironashram/github-readme-stats/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/anuraghazra/github-readme-stats.git"
+    "url": "https://github.com/ironashram/github-readme-stats.git"
   },
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
@@ -30,6 +30,9 @@
     "bench": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.bench.config.js"
   },
   "author": "Anurag Hazra",
+  "contributors": [
+    "Michele Palazzi"
+  ],
   "license": "MIT",
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.3",

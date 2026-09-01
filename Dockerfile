@@ -10,7 +10,6 @@ RUN npm i express
 COPY api ./api
 COPY src ./src
 COPY themes ./themes
-COPY vercel.json ./
 COPY express.js ./
 
 FROM node:lts-alpine
