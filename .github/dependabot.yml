@@ -19,6 +19,9 @@ updates:
     commit-message:
       prefix: "ci(deps)"
       prefix-development: "ci(deps-dev)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
 
   # Maintain dependencies for Devcontainers
   - package-ecosystem: devcontainers
