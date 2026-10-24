@@ -20,8 +20,9 @@ COPY --from=builder /app /app
 
 RUN mkdir -p /app/cache && chmod 777 /app/cache
 
-RUN npm install -g dotenv-cli --ignore-scripts
-RUN apk --no-cache add curl
+RUN apk upgrade --no-cache && \
+    apk add --no-cache curl && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 ARG PORT=9000
 ENV PORT=${PORT}
@@ -31,4 +32,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE ${PORT}
 
-CMD ["dotenv", "--", "node", "express.js"]
+CMD ["node", "express.js"]
